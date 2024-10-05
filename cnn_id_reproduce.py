@@ -7,25 +7,22 @@ from sacred import Experiment
 from sacred.observers import MongoObserver
 
 
-
-sys.path.append("/home/thallybu/ICPR_2024_IMU_AnonGAN/code")
-sys.path.append("/home/thallybu/Anon_GAN_SD")
 from observer import create_observer 
-from dataset.MotionSenseDataset import MotionSenseDataset
+from MoCapDataset import MoCapDataset
 from torch.utils.data import Dataset, DataLoader
-from model.LARa_Identificator import Identificator
+from LARa_Identificator import Identificator
 from sklearn.metrics import f1_score, accuracy_score
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-ex = Experiment('MotionSense - ICPR2024 - Reproduce ID Network Results')
+ex = Experiment('MoCap - Demo - Reproduce ID Network Results')
 # Create MongoObserver and append it to ex.observers
 ex.observers.append(create_observer())
 
 @ex.config
 def reproduce_id_network_config():
-    network_path = '/home/thallybu/ICPR_2024_IMU_AnonGAN/code/model/cnn_motionsense_id.pt' 
+    network_path = '/data/nnair/demo/networks/id_cnnimu_mocap_all.pt' 
 
 @ex.automain
 def reproduce_id_network(network_path):
@@ -34,12 +31,12 @@ def reproduce_id_network(network_path):
     identificator_network_saved = torch.load(identificator_loc)
     identificator_network_config = identificator_network_saved['network_config']
     identificator_network_config['fully_convolutional'] = 'FC'
-    identificator_network_config['dataset'] = 'motionsense'
+    identificator_network_config['dataset'] = 'mocap'
     identificator = Identificator(identificator_network_config).to(device)
     identificator.load_state_dict(identificator_network_saved['state_dict'])
     identificator = identificator.eval()
 
-    test_ds = MotionSenseDataset('/data/thallybu/ICPR_2024/data/motionsense/test.csv', '/data/thallybu/ICPR_2024/data/motionsense/sequences_test')
+    test_ds = MoCapDataset('/data/nnair/demo/prepros/mocap/test.csv', '/data/nnair/demo/prepros/mocap/sequences_test')
     test_dataloader = DataLoader(test_ds, batch_size=1, shuffle=True)
     
     all_predictions = []

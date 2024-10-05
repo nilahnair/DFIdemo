@@ -1,26 +1,23 @@
 
 import sys
 
-sys.path.append("/home/thallybu/ICPR_2024_IMU_AnonGAN/code")
-sys.path.append("/home/thallybu/Anon_GAN_SD")
-
 import torch 
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import os
 import numpy as np
 from sacred import Experiment
-from model.Autoencoder.ConvolutionalAutoencoder import ConvolutionalAutoencoder
-from util.plot_motionsense import plot_sample, compare_samples
+from model.Autoencoder.AutoencoderExt import AutoencoderExtended
+from util.plot_mocap import plot_sample, compare_samples
 from torchinfo import summary
 
 from observer import create_observer 
-from dataset.MotionSenseDataset import MotionSenseDataset
+from MoCapDataset import MoCapDataset
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score, accuracy_score
 
 
-ex = Experiment('MotionSense - ICPR2024 - Train Autoencoder')
+ex = Experiment('MoCap - Train Autoencoder')
 ex.observers.append(create_observer())
 
 @ex.config
@@ -31,50 +28,49 @@ def train_autoencoder_cofig():
     }
     
     training_conf = {
-        "learning_rate": 1e-4,
+        "learning_rate": 1e-6,
         "learning_threshold": 1e-15,
         "scheduler_step": 0.95,
         "batch_size": 16,
-        "dataset_path": 'model/cnn_motionsense_id.pt',
+        "dataset_path": '/data/nnair/demo/networks/id_cnnimu_mocap_all.pt',
 
         # note: the experiment ID will be used to create a new subdirectory under this path
-        "network_output_base_path": '/data/thallybu/ICPR_2024/autoencoder_trained_output/',
-        "network_output_name": 'autoencoder',
+        "network_output_base_path": '/data/nnair/demo/autoencoder/',
+        "network_output_name": 'autoencoderext',
     }
 
     autoencoder_conf = {
-        "padding_input": (10, 0),
-        "padding_output": (5, 0),
+        "padding_input": (5, 0),
+        "padding_output": (3, 0),
         "bias": True,
-        "kernel": (5, 1),
+        "kernel": (4, 4),
         "stride": (2, 1),
-        "channels": [1, 2, 2, 4, 2, 2, 1],
+        "channels": [1, 16, 32, 64, 32, 16, 1],
         
         # Writing those in the config for documentation, rather than flexibility
-        "model": "convAutoencoder",
+        "model": "AutoencoderExtended",
         "loss_function": "MSE",
         "optimizer": "ADAM"
     }
     
 
 def train(model, optimizer, loss_fn, dataloader, device):
-    model.train()
+    model.train(mode=True)
     running_loss = 0 
     train_loss_history = []
     
     for X in dataloader:
-        X, y = X['data'].to(device).to(torch.float32), X['label']
+        x, y = X['data'].to(device).to(torch.float32), X['label']
         # Add noise with a mean of 0 and standard deviation of 0.01
-        noise = torch.randn_like(X) * 0.01
+        noise = torch.randn_like(x) * 0.01
 
         # Add noise to the tensor
-        noisy_tensor = X + noise
+        noisy_tensor = x + noise
         # Clamp the noisy tensor to ensure values stay within [0, 1]
         noisy_tensor_clamped = torch.clamp(noisy_tensor, 0, 1)
-
         X_reconstructed = model(noisy_tensor_clamped)        
         optimizer.zero_grad()
-        loss = loss_fn(X_reconstructed, X)
+        loss = loss_fn(X_reconstructed, x)
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
@@ -143,18 +139,18 @@ def train_autoencoder_e2e(host_conf, training_conf, autoencoder_conf):
     print(device)
     print(f"Scheduler enabled")
 
-    autoencoder = ConvolutionalAutoencoder(autoencoder_conf)
+    autoencoder = AutoencoderExtended(autoencoder_conf)
     autoencoder.to(device)
-    summary(autoencoder, (1, 1, 200, 9))
+    summary(autoencoder, (1, 1, 200, 126))
     autoencoder_optimizer = torch.optim.Adam(autoencoder.parameters(), lr=training_conf['learning_rate'])
     autoencoder_loss_fn = torch.nn.MSELoss()
     autoencoder_scheduler = lr_scheduler.ExponentialLR(autoencoder_optimizer, gamma=training_conf['scheduler_step'])
 
-    train_ds = MotionSenseDataset('/data/thallybu/ICPR_2024/data/motionsense/train.csv', '/data/thallybu/ICPR_2024/data/motionsense/sequences_train')
+    train_ds = MoCapDataset('/data/nnair/demo/prepros/mocap/train.csv', '/data/nnair/demo/prepros/mocap/sequences_train')
     train_dataloader = DataLoader(train_ds, batch_size=training_conf['batch_size'], shuffle=True)
-    val_ds = MotionSenseDataset('/data/thallybu/ICPR_2024/data/motionsense/val.csv', '/data/thallybu/ICPR_2024/data/motionsense/sequences_val')
+    val_ds = MoCapDataset('/data/nnair/demo/prepros/mocap/val.csv', '/data/nnair/demo/prepros/mocap/sequences_val')
     val_dataloader = DataLoader(val_ds, batch_size=training_conf['batch_size'], shuffle=True)
-    test_ds = MotionSenseDataset('/data/thallybu/ICPR_2024/data/motionsense/test.csv', '/data/thallybu/ICPR_2024/data/motionsense/sequences_test')
+    test_ds = MoCapDataset('/data/nnair/demo/prepros/mocap/test.csv', '/data/nnair/demo/prepros/mocap/sequences_test')
     test_dataloader = DataLoader(test_ds, batch_size=training_conf['batch_size'], shuffle=True)
 
 
@@ -164,7 +160,7 @@ def train_autoencoder_e2e(host_conf, training_conf, autoencoder_conf):
     epoch = 0
     epoch_loss = 0
 
-    while True:    
+    while epoch <= 100:
         train_running_loss, train_loss_history = train(autoencoder, autoencoder_optimizer, autoencoder_loss_fn, train_dataloader, device)
         val_running_loss, val_loss_history = validate(autoencoder, autoencoder_loss_fn, val_dataloader, device)
         generate_samples(model=autoencoder, epoch=epoch, val_dataloader=val_dataloader, device=device)

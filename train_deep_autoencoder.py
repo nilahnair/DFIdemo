@@ -9,11 +9,11 @@ import os
 import numpy as np
 from sacred import Experiment
 from model.Autoencoder.DeepConvolutionalAutoencoder import DeepConvolutionalAutoencoder
-from util.plot_motionsense import plot_sample, compare_samples
+from util.plot_mocap import plot_sample, compare_samples
 from torchinfo import summary
 
 from observer import create_observer 
-from dataset.MotionSenseDataset import MotionSenseDataset
+from dataset.MoCapDataset import MocapDataset
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score, accuracy_score
 
@@ -54,7 +54,7 @@ def train_autoencoder_cofig():
     
 
 def train(model, optimizer, loss_fn, dataloader, device):
-    model.train()
+    model.train(mode=True)
     running_loss = 0 
     train_loss_history = []
     
