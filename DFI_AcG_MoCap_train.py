@@ -30,6 +30,7 @@ def pselect(X, y):
     return X[range(X.shape[0]), y.to(torch.int64)]
 
 def generator_loss_fn(disc_preds, id_preds, y_id):
+    print('check 3')
     id_accurate_probabilities = pselect(id_preds, y_id)
     id_accurate_probabilities = 0.9 * id_accurate_probabilities + 0.1 
     print('id prob')
@@ -339,7 +340,7 @@ def train_AcG():
     val_dataloader = DataLoader(val_ds, batch_size=16, shuffle=True)
 
     identificator_loss_fn = torch.nn.CrossEntropyLoss()
-    generator_loss_fn = torch.nn.BCELoss()
+    #generator_loss_fn = torch.nn.BCELoss()
 
     epochs = 5
 
