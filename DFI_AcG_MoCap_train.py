@@ -30,11 +30,14 @@ def pselect(X, y):
     return X[range(X.shape[0]), y.to(torch.int64)]
 
 def generator_loss_fn(disc_preds, id_preds, y_id):
+    print('check 3')
     id_accurate_probabilities = pselect(id_preds, y_id)
     id_accurate_probabilities = 0.9 * id_accurate_probabilities + 0.1 
     print('id prob')
     print(id_accurate_probabilities)
-    return F.binary_cross_entropy(1 - disc_preds, torch.zeros_like(disc_preds)) * id_accurate_probabilities
+    loss_value= F.binary_cross_entropy(1 - disc_preds, torch.zeros_like(disc_preds)) * id_accurate_probabilities
+    print(loss_value.shape)
+    return loss_value
 
 def train(dataloader, g_model, g_optimizer, g_loss_fn, d_model, d_optimizer, d_loss_fn, i_model, i_loss_fn, device, epoch, subject_means_tensor):
     
@@ -111,18 +114,23 @@ def train(dataloader, g_model, g_optimizer, g_loss_fn, d_model, d_optimizer, d_l
         g_optimizer.zero_grad()
         d_model_preds= d_model(X_fake, rand_id_targets)
         print('dmodel preds shape')
-        print(d_model_preds)
+        print(d_model_preds.shape)
         print('identificator preds shape')
-        print(identificator_preds_fake)
+        print(identificator_preds_fake.shape)
         print('random subs shape')
-        print(rand_id_targets)
+        print(rand_id_targets.shape)
         generator_loss = g_loss_fn(d_model_preds, identificator_preds_fake, rand_id_targets)
+        print('check 4')
         generator_loss = torch.mean(generator_loss)
+        print('check 5')
         generator_loss.backward()
+        print('check 6')
         g_optimizer.step()
         
         # backward pass 
+        print('check 7')
         selected_subject_means = subject_means_tensor[y]
+        print('check 8')
         sample_encoded = g_model.encode(X.detach())
         sample_encoded_anon = sample_encoded - selected_subject_means
         X_unfake = g_model.dfi(sample_encoded_anon, rand_vec, y)
@@ -339,14 +347,14 @@ def train_AcG():
     val_dataloader = DataLoader(val_ds, batch_size=16, shuffle=True)
 
     identificator_loss_fn = torch.nn.CrossEntropyLoss()
-    generator_loss_fn = torch.nn.BCELoss()
+    #generator_loss_fn = torch.nn.BCELoss() ####<<<<<<<<<<<<<<<----------------
 
     epochs = 5
 
     for e in range(epochs):
         print(f"Epoch {e} / {epochs} ======================")
         train(train_dataloader, generator, generator_optimizer, generator_loss_fn, discriminator, discriminator_optimizer, discriminator_loss_fn, identificator, identificator_loss_fn, device, e+1, subject_means_tensor)
-        validate(val_dataloader, generator, generator_loss_fn, discriminator, discriminator_loss_fn, identificator, identificator_loss_fn, e + 1, '', None, None, None, device, subject_means_tensor)
+        validate(val_dataloader, generator, generator_loss_fn, discriminator, discriminator_loss_fn, identificator, identificator_loss_fn, e + 1, subject_means_tensor, '', None, None, None, device)
         generator_scheduler.step()
         discriminator_scheduler.step()    
         # torch.save(generator, f"mbientlab_condigan_211223_e{e}.pth")
@@ -358,7 +366,7 @@ def train_AcG():
     X = next(iter(val_dataloader))
     X, y = X['data'].to(device).to(torch.float32), X['label'].to(device).long()
     rand_vec = torch.randn((X.size(0), 1, 1, 32)).to(device)
-    rand_id_targets = torch.randint(0, 24, y.shape).to(device)
+    rand_id_targets = torch.randint(0, 16, y.shape).to(device)
 
     selected_subject_means = subject_means_tensor[y]
     sample_encoded = generator.encode(X)

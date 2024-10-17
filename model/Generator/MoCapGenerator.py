@@ -117,7 +117,10 @@ class MoCapGenerator(nn.Module):
         # Bottleneck
         bottle = self.bottleneck(enc)
         # Calculate feature map for latent vector input
+        print(f'bottle shape: {bottle.shape}')
+        print(f'latent shape: {latent_vector.shape}')
         rvc = self.encode_rv(latent_vector, y)
+        print(f'rvc shape: {rvc.shape}')
         
         # apply a DFI for the encoded vectors
         combined = bottle + rvc
